@@ -19,22 +19,45 @@ pub enum TabletReader {
 /// and the reader's status. Clones share both.
 #[derive(Clone)]
 pub struct PenFeed {
-    pressure: Arc<Mutex<Option<f32>>>,
+    readings: Arc<Mutex<Readings>>,
     reader: Arc<Mutex<TabletReader>>,
+}
+
+#[derive(Default)]
+struct Readings {
+    latest: Option<f32>,
+    /// The last non-zero reading since `take_contact`: a tap whose press and lift both arrive
+    /// between two frames leaves `latest` at the lift's 0
+    contact: Option<f32>,
 }
 
 impl PenFeed {
     pub fn new(reader: TabletReader) -> Self {
-        Self { pressure: Arc::default(), reader: Arc::new(Mutex::new(reader)) }
+        Self { readings: Arc::default(), reader: Arc::new(Mutex::new(reader)) }
     }
 
     pub fn set(&self, pressure: Option<f32>) {
         let pressure = pressure.map(|p| if p.is_finite() { p.clamp(0.0, 1.0) } else { 1.0 });
-        *self.pressure.lock().unwrap_or_else(PoisonError::into_inner) = pressure;
+        let mut readings = self.lock();
+        readings.latest = pressure;
+        match pressure {
+            Some(p) if p > 0.0 => readings.contact = Some(p),
+            Some(_) => {}
+            None => readings.contact = None,
+        }
     }
 
     pub fn get(&self) -> Option<f32> {
-        *self.pressure.lock().unwrap_or_else(PoisonError::into_inner)
+        self.lock().latest
+    }
+
+    /// The last non-zero reading since the previous call (once per frame).
+    pub fn take_contact(&self) -> Option<f32> {
+        self.lock().contact.take()
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Readings> {
+        self.readings.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     pub fn set_reader(&self, reader: TabletReader) {

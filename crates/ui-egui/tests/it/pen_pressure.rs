@@ -259,3 +259,29 @@ fn a_tablet_feed_supplies_pressure_without_touch_force() {
     assert_eq!(released, press, "the release frame keeps it too");
     assert_eq!(mouse, 1.0, "a mouse press after the pen paints at full pressure");
 }
+
+#[test]
+fn a_tablet_tap_between_two_frames_keeps_its_contact_pressure() {
+    let context = egui::Context::default();
+    let feed = texturecraft_ui_egui::pen_feed::PenFeed::new(texturecraft_ui_egui::pen_feed::TabletReader::Reading("test"));
+    feed.install(&context);
+    let position = pos2(100.0, 100.0);
+    let button = |pressed| Event::PointerButton { pos: position, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    let frame = |events: Vec<Event>| {
+        let mut input = egui::RawInput::default();
+        input.events = events;
+        let mut pressure = f32::NAN;
+        context.run_ui(input, |ui| pressure = texturecraft_ui_egui::viewport::pen_pressure(ui)).drop_without_applying_deltas();
+        pressure
+    };
+
+    feed.set(Some(0.4));
+    feed.set(Some(0.0));
+    let tap = frame(vec![button(true), button(false)]);
+    assert!(0.0 < tap && tap < 1.0, "the tap paints with its contact pressure, not the lift's 0: {tap}");
+
+    let hover = frame(vec![Event::PointerMoved(position)]);
+    let late_press = frame(vec![button(true)]);
+    assert_eq!(hover, 1.0);
+    assert!(late_press < tap, "a press read before its pressure arrives doesn't reuse the earlier tap's: {late_press}");
+}
