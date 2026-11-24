@@ -26,7 +26,7 @@ pub struct PenFeed {
 #[derive(Default)]
 struct Readings {
     latest: Option<f32>,
-    /// The last non-zero reading since `take_contact`: a tap whose press and lift both arrive
+    /// The last non-zero reading since `take_sample`: a tap whose press and lift both arrive
     /// between two frames leaves `latest` at the lift's 0
     contact: Option<f32>,
 }
@@ -51,9 +51,11 @@ impl PenFeed {
         self.lock().latest
     }
 
-    /// The last non-zero reading since the previous call (once per frame).
-    pub fn take_contact(&self) -> Option<f32> {
-        self.lock().contact.take()
+    /// The latest reading, and the last non-zero reading since the previous call (once per
+    /// frame), under one lock so a reading landing in between can't split them.
+    pub fn take_sample(&self) -> (Option<f32>, Option<f32>) {
+        let mut readings = self.lock();
+        (readings.latest, readings.contact.take())
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Readings> {
