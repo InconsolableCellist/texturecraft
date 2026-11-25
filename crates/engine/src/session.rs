@@ -268,6 +268,9 @@ pub struct ToolState {
     /// What the Clone tool copies: the composite or the selected layer alone.
     #[serde(default)]
     pub clone_from: CloneFrom,
+    /// What the Smudge tool drags: the composite or the selected layer alone.
+    #[serde(default)]
+    pub smudge_from: CloneFrom,
     /// The Path tool's curve being edited.
     #[serde(default)]
     pub path: crate::path_tool::PathState,
@@ -285,7 +288,7 @@ fn default_fill_visible_only() -> bool {
     true
 }
 
-/// What the Clone tool copies (the clone source modes).
+/// What the Clone tool copies and the Smudge tool drags (the source modes).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CloneFrom {
     /// Everything the texture set shows.
@@ -324,6 +327,7 @@ impl Default for ToolState {
             clone_source: None,
             clone_aligned: true,
             clone_from: CloneFrom::Composite,
+            smudge_from: CloneFrom::Composite,
             path: Default::default(),
         };
         t.values.insert(Channel::BaseColor, [0.8, 0.8, 0.8]);

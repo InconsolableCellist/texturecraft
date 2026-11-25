@@ -128,6 +128,11 @@ Clone tool's source. The source belongs to the active texture set: selecting ano
 {cloneAligned}` (default `true`) chooses how later strokes use it: aligned keeps the offset the
 first stroke fixed, so the source moves along with the brush; `false` makes every stroke start
 sampling at the source point. Changing `cloneAligned` forgets the offset of earlier strokes.
+
+`tool.brush {smudgeSource}` chooses what the Smudge tool drags: `composite` (the default) drags what
+the texture set shows into the selected layer, and `layer` drags the selected layer's own pixels.
+Use `layer` on a layer whose blend mode is not Normal, such as a Multiply layer: dragging the
+composite into it would blend those values with the layers below a second time.
 `tool.brush` takes the alpha's shared parameters next to `alpha`: `alphaSizeX` and `alphaSizeY`
 (5..100, percent of the stamp the alpha fills, default 100), `alphaRoundness` (0..100, only for the
 procedural Round alpha: 100 is a circle, 0 a square), `alphaContrast` (1..8, 1 leaves the values

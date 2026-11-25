@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Brush settings",
             [],
             None,
-            "{size?: 0..100, flow?: 0..100, opacity?: 0..100, spacing?: 1..1000, hardness?: 0..100, angle?, followPath?, alignment?: tangent|camera, lazy?, jitterSize?, jitterAngle?, jitterFlow?, jitterPosition?, alpha?: procedural name | {image: resource name} | {library: id (alpha.list)}, alphaSizeX?: 5..100 and alphaSizeY?: 5..100 (percent of the stamp the alpha fills), alphaRoundness?: 0..100 (Round alpha only: 100 circle, 0 square), alphaContrast?: 1..8, alphaInvert?, backfaceCulling?, symmetryOn? (the toolbar toggle; off keeps the settings), symmetryX?, symmetryY?, symmetryZ?, symmetryRadial?: 0..32 copies around symmetryAxis?: x|y|z (default y), symmetryOffset?: [x, y, z] (world units from the mesh center, where the mirror planes and radial axis cross), symmetryAngleSpan?: 0..360 degrees the radial copies spread over, minSize?, smudgeStrength?: 0..100, cloneSource?: composite|layer (what the Clone tool copies), cloneAligned? (default true: the first stroke fixes the offset to the source for the following strokes; false: every stroke starts sampling at the source point), particles?: {enabled?, count?: 1..16, lifetime?: 1..128 steps, gravity?: 0..2}}",
+            "{size?: 0..100, flow?: 0..100, opacity?: 0..100, spacing?: 1..1000, hardness?: 0..100, angle?, followPath?, alignment?: tangent|camera, lazy?, jitterSize?, jitterAngle?, jitterFlow?, jitterPosition?, alpha?: procedural name | {image: resource name} | {library: id (alpha.list)}, alphaSizeX?: 5..100 and alphaSizeY?: 5..100 (percent of the stamp the alpha fills), alphaRoundness?: 0..100 (Round alpha only: 100 circle, 0 square), alphaContrast?: 1..8, alphaInvert?, backfaceCulling?, symmetryOn? (the toolbar toggle; off keeps the settings), symmetryX?, symmetryY?, symmetryZ?, symmetryRadial?: 0..32 copies around symmetryAxis?: x|y|z (default y), symmetryOffset?: [x, y, z] (world units from the mesh center, where the mirror planes and radial axis cross), symmetryAngleSpan?: 0..360 degrees the radial copies spread over, minSize?, smudgeStrength?: 0..100, cloneSource?: composite|layer (what the Clone tool copies), smudgeSource?: composite|layer (what the Smudge tool drags), cloneAligned? (default true: the first stroke fixes the offset to the source for the following strokes; false: every stroke starts sampling at the source point), particles?: {enabled?, count?: 1..16, lifetime?: 1..128 steps, gravity?: 0..2}}",
             always,
             brush
         ),
@@ -259,18 +259,18 @@ fn brush(session: &mut Session, params: &Value) -> Result<Value> {
         particles.gravity = f32p(particle_params, "gravity").unwrap_or(particles.gravity);
     }
 
-    let clone_from = if let Some(value) = strp(params, "cloneSource") {
-        match value {
-            "composite" => CloneFrom::Composite,
-            "layer" => CloneFrom::Layer,
-            other => return Err(bad("tool.brush", format!("unknown clone source `{other}`: use composite or layer"))),
-        }
-    } else {
-        session.tool.clone_from
+    let source = |param: &str, tool: &str, current: CloneFrom| match strp(params, param) {
+        Some("composite") => Ok(CloneFrom::Composite),
+        Some("layer") => Ok(CloneFrom::Layer),
+        Some(other) => Err(bad("tool.brush", format!("unknown {tool} source `{other}`: use composite or layer"))),
+        None => Ok(current),
     };
+    let clone_from = source("cloneSource", "clone", session.tool.clone_from)?;
+    let smudge_from = source("smudgeSource", "smudge", session.tool.smudge_from)?;
 
     session.tool.brush = settings.sanitized();
     session.tool.clone_from = clone_from;
+    session.tool.smudge_from = smudge_from;
     if let Some(aligned) = boolp(params, "cloneAligned")
         && aligned != session.tool.clone_aligned
     {
@@ -307,6 +307,7 @@ pub(crate) fn brush_json(session: &Session) -> Value {
         "symmetryOffset": settings.symmetry.offset, "symmetryOn": settings.symmetry.enabled, "symmetryAngleSpan": settings.symmetry.angle_span,
         "material": session.tool.material, "smudgeStrength": session.tool.smudge_strength * 100.0, "particles": settings.particles,
         "cloneSource": if session.tool.clone_from == CloneFrom::Layer { "layer" } else { "composite" },
+        "smudgeSource": if session.tool.smudge_from == CloneFrom::Layer { "layer" } else { "composite" },
         "cloneAligned": session.tool.clone_aligned,
     })
 }

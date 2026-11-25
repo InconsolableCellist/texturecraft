@@ -227,17 +227,24 @@ impl Session {
         let ts = self.ts();
         let size = self.caches.get(ts).map(|c| c.size).unwrap_or((1024, 1024));
         let pickup = if quick_mask { None } else { self.pickup_mode(first_uv)? };
-        let composite_pickup = tool == Tool::Smudge || (tool == Tool::Clone && self.tool.clone_from == CloneFrom::Composite);
+        // Clone and Smudge each read the composite or the selected layer alone
+        let from_layer = match tool {
+            Tool::Clone => self.tool.clone_from == CloneFrom::Layer,
+            Tool::Smudge => self.tool.smudge_from == CloneFrom::Layer,
+            _ => false,
+        };
+        let composite_pickup = matches!(tool, Tool::Clone | Tool::Smudge) && !from_layer;
         if pickup.is_some() && composite_pickup && !self.paints_mask() && self.solo.is_none() {
             // Only a composite pickup reads the viewport cache
             self.update();
         }
 
-        // Cloning from the selected layer reads that layer alone
+        // Cloning or smudging from the selected layer reads that layer alone
         let layer_source = match self.selected_layer() {
-            Some(id) if pickup.is_some() && tool == Tool::Clone && self.tool.clone_from == CloneFrom::Layer && !self.paints_mask() => {
-                Some(self.flatten(ts, id).ok_or_else(|| EngineError::Other("clone from a paint or fill layer (folders have no content of their own)".into()))?)
-            }
+            Some(id) if pickup.is_some() && from_layer && !self.paints_mask() => Some(
+                self.flatten(ts, id)
+                    .ok_or_else(|| EngineError::Other("clone or smudge from a paint or fill layer (folders have no content of their own)".into()))?,
+            ),
             _ => None,
         };
         let before = self.doc.clone();

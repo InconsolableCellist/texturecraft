@@ -512,3 +512,28 @@ fn solo_keeps_the_document_source_for_clone_and_the_material_picker() {
     s.update();
     assert!(red(color_at(&s, 240.0, 200.0)));
 }
+
+/// Whether red shows at (205, 200) with the red layer hidden, after a smudge on an empty layer above it dragged from `source`
+fn smudge_leaves_red_in_the_layer_above(source: &str) -> bool {
+    let mut s = session();
+    let below = s.selected_layer().unwrap();
+    paint_red(&mut s, 40.0);
+    dab(&mut s, 190.0, 200.0);
+    assert!(red(color_at(&s, 205.0, 200.0)));
+
+    execute(&mut s, "layer.add.paint", &Value::Null).unwrap();
+    execute(&mut s, "tool.smudge", &Value::Null).unwrap();
+    execute(&mut s, "tool.brush", &json!({"size": 10, "smudgeStrength": 100, "spacing": 5, "smudgeSource": source})).unwrap();
+    let points: Vec<[f32; 2]> = (0..=30).map(|i| [175.0 + i as f32, 200.0]).collect();
+    execute(&mut s, "tool.stroke", &json!({"points": points})).unwrap();
+    execute(&mut s, "layer.visible", &json!({"layer": below.0, "visible": false})).unwrap();
+    s.update();
+    red(color_at(&s, 205.0, 200.0))
+}
+
+#[test]
+fn smudge_from_the_layer_drags_only_that_layers_pixels() {
+    assert!(smudge_leaves_red_in_the_layer_above("composite"), "the composite's red is dragged into the layer");
+    assert!(!smudge_leaves_red_in_the_layer_above("layer"), "an empty layer has nothing of its own to drag");
+    assert!(execute(&mut session(), "tool.brush", &json!({"smudgeSource": "below"})).is_err());
+}

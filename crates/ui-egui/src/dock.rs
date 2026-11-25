@@ -2193,7 +2193,23 @@ fn smudge_section(app: &mut TextureCraftApp, ui: &mut Ui) {
     if slider(ui, tr("Strength"), &mut v, 0.0..=100.0, 0).changed() {
         app.session.tool.smudge_strength = (v / 100.0).clamp(0.0, 1.0);
     }
-    ui.label(RichText::new(tr("Drags the layer stack's values along the stroke into the selected layer.")).size(10.5).color(tk.text_dim));
+    ui.horizontal(|ui| {
+        ui.label(tr("Drag from"));
+        for (mode, label, tip, id) in [
+            (CloneFrom::Composite, tr("All layers"), tr("Drag what the texture set shows into the selected layer"), "composite"),
+            (CloneFrom::Layer, tr("Current layer"), tr("Drag the selected layer's own pixels (its empty parts drag nothing)"), "layer"),
+        ] {
+            if chip(ui, label, app.session.tool.smudge_from == mode).on_hover_text(tip).clicked() {
+                app.run("tool.brush", json!({"smudgeSource": id}));
+            }
+        }
+    });
+    let hint = if app.session.tool.smudge_from == CloneFrom::Layer {
+        tr("Drags the selected layer's own values along the stroke.")
+    } else {
+        tr("Drags the layer stack's values along the stroke into the selected layer.")
+    };
+    ui.label(RichText::new(hint).size(10.5).color(tk.text_dim));
     ui.add_space(4.0);
     ui.label(tr("Channels dragged"));
     material_channel_chips(app, ui);
