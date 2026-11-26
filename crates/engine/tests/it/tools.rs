@@ -564,6 +564,22 @@ fn smudge_on_a_pass_through_layer_drags_the_layers_below() {
     assert!(pass[0] - below[0] > 0.2 && pass[1] < below[1], "on Pass through the smudge drags the red below: {below:?} -> {pass:?}");
 }
 
+#[test]
+fn smudge_on_an_instance_of_a_pass_through_layer_drags_the_layers_below() {
+    let mut s = session();
+    paint_red(&mut s, 12.0);
+    dab(&mut s, 170.0, 200.0);
+    let below = color_at(&s, 205.0, 200.0);
+    let source = layer_of(execute(&mut s, "layer.add.paint", &json!({})).unwrap());
+    execute(&mut s, "layer.blend", &json!({"layer": source, "channel": "all", "mode": "passthrough"})).unwrap();
+    let instance = layer_of(execute(&mut s, "layer.instance", &json!({"layer": source})).unwrap());
+    execute(&mut s, "layer.select", &json!({"layer": instance})).unwrap();
+
+    smudge_right(&mut s, 170.0, 210.0);
+    let pass = color_at(&s, 205.0, 200.0);
+    assert!(pass[0] - below[0] > 0.2 && pass[1] < below[1], "the instance smudges like its Pass through source: {below:?} -> {pass:?}");
+}
+
 /// Most coverage of channel `c` of `layer` over the whole texture (0 where it has no paint)
 fn layer_coverage(s: &Session, layer: LayerId, c: Channel) -> f32 {
     let Some(img) = s.doc.pixels.layer(layer, c) else { return 0.0 };

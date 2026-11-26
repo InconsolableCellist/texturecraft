@@ -364,10 +364,11 @@ impl Session {
         let p = &self.doc.project;
         let Some(id) = self.selected_layer() else { return false };
         let owner = p.effect(id).map_or(id, |(owner, _)| owner);
-        let Ok(layer) = p.layer(owner) else { return false };
+        // An instance paints its source and keeps no channel blends of its own: read the source's
+        let Some(layer) = p.content_layer(owner) else { return false };
 
         // Only the channels the stroke paints count (a layer can keep a channel its set dropped)
-        let painted_channels = self.stroke_values(PaintTarget::Layer(id));
+        let painted_channels = self.stroke_values(PaintTarget::Layer(layer.id));
         let mut painted = painted_channels.keys().filter_map(|c| layer.blend(*c)).peekable();
         painted.peek().is_some() && painted.all(|b| b.mode == BlendMode::Passthrough)
     }
