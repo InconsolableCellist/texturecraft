@@ -87,15 +87,18 @@ fn a_hidden_texture_set_never_takes_the_pivot() {
 fn an_orthographic_pan_keeps_what_is_in_front_of_the_new_pivot_in_view() {
     let mut session = plates();
     execute(&mut session, "camera.set", &json!({"ortho": true, "distance": 3.0})).unwrap();
-    let on_front = Vec3::new(2.0, 0.0, 2.0);
+    let on_front = Vec3::new(0.8, 0.0, 2.0);
 
-    // The view center moves onto the back plate, beside the front one
-    pan_right(&mut session, -1.0);
+    // The view center moves onto the back plate, with the front one's edge still in view
+    pan_right(&mut session, -0.5);
 
     assert!(session.camera.target.z < -0.5, "the pivot moves toward the back plate: {:?}", session.camera.target);
     let ndc = session.camera.project(on_front, session.viewport.x / session.viewport.y).unwrap();
     let pixel = Vec2::new((ndc.x * 0.5 + 0.5) * session.viewport.x, (0.5 - ndc.y * 0.5) * session.viewport.y);
     assert!((0.0..=1.0).contains(&ndc.z), "the front plate stays between the clipping planes: depth {}", ndc.z);
+    assert!(ndc.x.abs() <= 1.0 && ndc.y.abs() <= 1.0, "and inside the viewport: {ndc:?}");
+    let center = session.pick(session.viewport * 0.5, session.viewport).unwrap();
+    assert!((center.pos.z + 2.0).abs() < 1e-3, "the back plate is still what fills the view center: {:?}", center.pos);
     let hit = session.pick(pixel, session.viewport).unwrap();
     assert!((hit.pos.z - 2.0).abs() < 1e-3, "and is what the brush finds there: {:?}", hit.pos);
 }
