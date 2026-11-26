@@ -1121,11 +1121,13 @@ impl Session {
             // Copies can leave the source surface, within the same depth allowed for brush stamps
             let copy_depth = brush.size * (bounds_max - bounds_min).length().max(MIN_BRUSH_SCALE) * brush.depth;
             let eye = self.camera.eye();
-            let camera_distance = self.camera.distance.max(MIN_BRUSH_SCALE);
 
             // Bound the search using the farthest bounding-box corner; acceptance still uses the actual hit
-            let max_copy_depth =
-                if brush.screen_space { copy_depth * (bounds_min - eye).abs().max((bounds_max - eye).abs()).length() / camera_distance } else { copy_depth };
+            let max_copy_depth = if brush.screen_space {
+                copy_depth * self.camera.screen_brush_scale((bounds_min - eye).abs().max((bounds_max - eye).abs()).length())
+            } else {
+                copy_depth
+            };
 
             fill_coverage(&mut canvas, &uv_buffer, |texel, _| {
                 let Some(surface) = uv_buffer.surface(mesh, texel) else { return 0.0 };
@@ -1159,7 +1161,7 @@ impl Session {
                     let off_surface = if !is_copy {
                         0.0
                     } else if brush.screen_space {
-                        copy_depth * (origin + direction * hit.t).distance(eye) / camera_distance
+                        copy_depth * self.camera.screen_brush_scale((origin + direction * hit.t).distance(eye))
                     } else {
                         copy_depth
                     };

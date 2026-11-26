@@ -129,7 +129,7 @@ impl Stroke {
         let p = pressure.clamp(0.0, 1.0);
         let scale = self.settings.min_size + (1.0 - self.settings.min_size) * p;
         let r = self.radius * if pressure < 1.0 { scale } else { 1.0 };
-        if self.settings.screen_space { r * (pos.distance(ctx.camera.eye()) / ctx.camera.distance.max(1e-4)) } else { r }
+        if self.settings.screen_space { r * ctx.camera.screen_brush_scale(pos.distance(ctx.camera.eye())) } else { r }
     }
 
     fn feed(&mut self, ctx: &PickCtx, screen: Vec2, pressure: f32, depth: u32, out: &mut Vec<Stamp>) {

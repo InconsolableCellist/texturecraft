@@ -130,6 +130,16 @@ impl OrbitCamera {
         self.distance = r / (self.fov.clamp(5.0, 150.0).to_radians() * 0.5).sin() * 1.1;
     }
 
+    /// World size of one unit of a screen-space brush at `eye_distance` from the eye: constant on
+    /// screen whatever the zoom or pivot, and 1 at the pivot of a freshly framed view.
+    pub fn screen_brush_scale(&self, eye_distance: f32) -> f32 {
+        let half_fov = self.fov.clamp(5.0, 150.0).to_radians() * 0.5;
+        // The distance `frame` picks for the scene
+        let reference = (self.scene_radius.max(1e-3) / half_fov.sin() * 1.1).max(1e-4);
+        let depth = if self.ortho { self.distance } else { eye_distance };
+        depth / reference
+    }
+
     pub fn orbit(&mut self, dx: f32, dy: f32) {
         if self.free {
             // Camera-local axes let the trackball turn the model over
