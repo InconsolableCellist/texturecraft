@@ -63,6 +63,7 @@ mod pbr_import;
 mod perf;
 mod polygon_fill;
 mod project_recovery;
+mod rebuilt_uv_layout;
 mod resources_used;
 mod sample;
 mod solo;

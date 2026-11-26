@@ -381,9 +381,14 @@ fn shade(app: &TextureCraftApp) -> Shade {
 /// The texture set a shelf material or image dragged over the 3D view `response` would drop on, its edges drawn in the accent color
 fn drop_highlight(app: &TextureCraftApp, ui: &Ui, response: &egui::Response) -> Option<SetHighlight> {
     let set = crate::shelf::drop_set(app, ui, response)?;
+
+    Some(set_highlight(ui, set))
+}
+
+fn set_highlight(ui: &Ui, texture_set: usize) -> SetHighlight {
     let accent = egui::Rgba::from(Tokens::get(ui.ctx()).viewport_accent);
 
-    Some(SetHighlight { set, color: [accent.r(), accent.g(), accent.b()] })
+    SetHighlight { set: texture_set, color: [accent.r(), accent.g(), accent.b()] }
 }
 
 /// Show what the GPU side reported (each message once while its toast is up).
@@ -450,7 +455,15 @@ fn frame_size_in_pixels(ui: &Ui, rect: Rect) -> [u32; 2] {
     [pixels(rect.left(), rect.right()), pixels(rect.top(), rect.bottom())]
 }
 
+#[cfg(test)]
+const TEST_SCENE_SET_HOVER: &str = "scene_frame_set_hover";
+
 fn add_callback(app: &mut TextureCraftApp, ui: &Ui, rect: Rect, mut frame: Frame, sync: &mut PendingSync) {
+    #[cfg(test)]
+    if frame.view_id == VIEW_3D {
+        ui.data_mut(|data| data.insert_temp(egui::Id::unique(TEST_SCENE_SET_HOVER), frame.shade.set_hover.map(|highlight| highlight.set)));
+    }
+
     let tokens = Tokens::get(ui.ctx());
     let bake = bake_visualization(app);
     frame.shade.bake = bake;
@@ -1044,12 +1057,16 @@ fn view_3d(app: &mut TextureCraftApp, ui: &mut Ui, rect: Rect, sync: &mut Pendin
         }
     }
 
+    let set_hover = app
+        .hovered_texture_set
+        .filter(|&(project_id, _)| project_id == app.session.project_id && !app.ui.hide_ui && !crate::docking::input_blocked(app, ui.ctx()))
+        .map(|(_, texture_set)| set_highlight(ui, texture_set));
     let frame = Frame {
         view_id: crate::viewport::VIEW_3D,
         size: frame_size_in_pixels(ui, rect),
         kind: ViewKind::Scene,
         camera: app.session.camera,
-        shade: Shade { highlight: drop_highlight(app, ui, &response), ..shade(app) },
+        shade: Shade { highlight: drop_highlight(app, ui, &response), set_hover, ..shade(app) },
         visible: app.session.doc.project.texture_sets.iter().map(|texture_set| texture_set.visible).collect(),
         overlay: crate::symmetry::scene_overlay(app, ui, rect),
     };
@@ -2519,6 +2536,46 @@ fn eyedrop(app: &mut TextureCraftApp, ctx: &egui::Context, bar: egui::Id, pixel:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn hovering_a_texture_set_row_previews_it_without_selecting_it() {
+        use crate::state::Mode;
+        use egui_kittest::Harness;
+        use egui_kittest::kittest::Queryable;
+
+        // App creation and frames both set the shared UI language
+        let _language_guard = crate::i18n::TEST_LANGUAGE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let session =
+            Session::new_project("Texture set hover", texturecraft_engine::geom::primitives::material_ball(), "builtin:material_ball", None, 128).unwrap();
+        let hovered_set = 1;
+        let name = session.doc.project.texture_sets[hovered_set].name.clone();
+        let selected_set = session.ts();
+        assert_ne!(hovered_set, selected_set);
+
+        let mut harness = Harness::builder().with_size(egui::vec2(1600.0, 1500.0)).build_eframe(|context| TextureCraftApp::new(context, session));
+        let preview = |harness: &Harness<'_, TextureCraftApp>| {
+            harness.ctx.data(|data| data.get_temp::<Option<usize>>(egui::Id::unique(TEST_SCENE_SET_HOVER))).expect("the 3D view submitted a scene frame")
+        };
+
+        for mode in [Mode::Painting, Mode::Baking] {
+            harness.state_mut().ui.mode = mode;
+            harness.run_steps(4);
+            assert_eq!(preview(&harness), None, "{mode:?}: the preview starts clear");
+
+            harness.get_by_label(&name).hover();
+            harness.run_steps(3);
+            assert_eq!(preview(&harness), Some(hovered_set), "{mode:?}: the hovered set reaches the viewport");
+            assert_eq!(harness.state().session.ts(), selected_set, "{mode:?}: hover keeps the selected set");
+
+            let away = harness.state().viewport_rect.center();
+            harness.event(egui::Event::PointerMoved(away));
+            harness.run_steps(3);
+            assert_eq!(preview(&harness), None, "{mode:?}: leaving the row clears the preview");
+            assert_eq!(harness.state().session.ts(), selected_set, "{mode:?}: leaving the row keeps the selected set");
+        }
+    }
+
     #[test]
     fn the_hover_label_finds_the_tile_under_the_cursor_in_a_turned_view() {
         let session = Session::new_project("Tiles", texturecraft_engine::geom::primitives::udim_plane(), "builtin:udim_plane", None, 128).unwrap();
