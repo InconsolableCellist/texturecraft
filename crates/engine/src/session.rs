@@ -466,6 +466,8 @@ pub struct Session {
     pub quick_mask: crate::quick_mask::QuickMask,
     /// A path sublayer is being repainted from its paths (the only way to paint into one).
     pub(crate) painting_paths: bool,
+    /// Multiplies a screen-space brush while a path saved before the framed brush scale repaints (1 otherwise)
+    pub(crate) path_screen_factor: f32,
     /// Pixels of the paths below the one being edited, so live edits skip repainting them.
     pub(crate) path_cache: Option<crate::path_tool::PathCache>,
     /// A new path's live preview: the path becomes an undo step only when it is applied
@@ -548,6 +550,7 @@ impl Session {
             library_alphas: BTreeSet::new(),
             quick_mask: Default::default(),
             painting_paths: false,
+            path_screen_factor: 1.0,
             path_cache: None,
             path_draft: None,
             path_steps: Default::default(),

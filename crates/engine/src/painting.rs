@@ -273,7 +273,10 @@ impl Session {
         }
 
         let depth = (!uv_mode).then(|| self.eye_depth(viewport));
-        let stroke = Stroke::new(&self.tool.brush, &self.mesh);
+        let mut stroke = Stroke::new(&self.tool.brush, &self.mesh);
+        if stroke.settings.screen_space {
+            stroke.radius *= self.path_screen_factor;
+        }
         let mut canvas = StrokeCanvas::new(size.0, size.1);
         if !quick_mask {
             canvas.limit = self.stroke_limit(ts, size);
