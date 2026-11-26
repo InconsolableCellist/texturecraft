@@ -563,3 +563,56 @@ fn smudge_on_a_pass_through_layer_drags_the_layers_below() {
     let pass = color_at(&s, 205.0, 200.0);
     assert!(pass[0] - below[0] > 0.2 && pass[1] < below[1], "on Pass through the smudge drags the red below: {below:?} -> {pass:?}");
 }
+
+/// Most coverage of channel `c` of `layer` over the whole texture (0 where it has no paint)
+fn layer_coverage(s: &Session, layer: LayerId, c: Channel) -> f32 {
+    let Some(img) = s.doc.pixels.layer(layer, c) else { return 0.0 };
+    let last = img.comps() - 1;
+    (0..img.height())
+        .flat_map(|y| (0..img.width()).map(move |x| (x, y)))
+        .map(|(x, y)| texturecraft_engine::texel::from_u16(img.get(x, y)[last]))
+        .fold(0.0, f32::max)
+}
+
+#[test]
+fn smudging_a_layer_leaves_its_unpainted_channels_unpainted() {
+    // Red base color painted with every other channel off: the layer holds base color only
+    let mut s = session();
+    paint_red(&mut s, 12.0);
+    let others: Vec<Channel> = s.doc.project.texture_sets[0].channels.iter().map(|(c, _)| *c).filter(|c| *c != Channel::BaseColor).collect();
+    for c in &others {
+        execute(&mut s, "tool.material", &json!({"channel": c.id(), "enabled": false})).unwrap();
+    }
+    dab(&mut s, 170.0, 200.0);
+    let layer = s.selected_layer_id().unwrap();
+    assert!(others.iter().all(|c| layer_coverage(&s, layer, *c) == 0.0), "setup: only base color painted");
+    let before = color_at(&s, 205.0, 200.0);
+
+    // Smudging with every channel on drags the red but writes nothing where those channels have no paint
+    for c in &others {
+        execute(&mut s, "tool.material", &json!({"channel": c.id(), "enabled": true})).unwrap();
+    }
+    smudge_right(&mut s, 170.0, 210.0);
+    let after = color_at(&s, 205.0, 200.0);
+    assert!(after[0] - before[0] > 0.2, "the red is dragged: {before:?} -> {after:?}");
+    for c in &others {
+        assert_eq!(layer_coverage(&s, layer, *c), 0.0, "{c:?} stays unpainted");
+    }
+}
+
+#[test]
+fn a_channel_the_set_dropped_does_not_stop_a_pass_through_smudge() {
+    let mut s = session();
+    paint_red(&mut s, 12.0);
+    dab(&mut s, 170.0, 200.0);
+    let below = color_at(&s, 205.0, 200.0);
+    let top = layer_of(execute(&mut s, "layer.add.paint", &json!({})).unwrap());
+    execute(&mut s, "layer.select", &json!({"layer": top})).unwrap();
+
+    // The layer keeps its roughness entry (Normal) after the set drops roughness
+    execute(&mut s, "textureSet.channel.remove", &json!({"channel": "roughness"})).unwrap();
+    execute(&mut s, "layer.blend", &json!({"layer": top, "channel": "all", "mode": "passthrough"})).unwrap();
+    smudge_right(&mut s, 170.0, 210.0);
+    let pass = color_at(&s, 205.0, 200.0);
+    assert!(pass[0] - below[0] > 0.2 && pass[1] < below[1], "the smudge drags the red below: {below:?} -> {pass:?}");
+}

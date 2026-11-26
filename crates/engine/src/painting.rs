@@ -365,7 +365,10 @@ impl Session {
         let Some(id) = self.selected_layer() else { return false };
         let owner = p.effect(id).map_or(id, |(owner, _)| owner);
         let Ok(layer) = p.layer(owner) else { return false };
-        let mut painted = self.tool.enabled.iter().filter_map(|c| layer.blend(*c)).peekable();
+
+        // Only the channels the stroke paints count (a layer can keep a channel its set dropped)
+        let painted_channels = self.stroke_values(PaintTarget::Layer(id));
+        let mut painted = painted_channels.keys().filter_map(|c| layer.blend(*c)).peekable();
         painted.peek().is_some() && painted.all(|b| b.mode == BlendMode::Passthrough)
     }
 
@@ -681,7 +684,16 @@ impl Session {
     pub(crate) fn paint_fill(&mut self, ts: usize, canvas: &StrokeCanvas, gray: &MaskGray) -> Result<()> {
         let size = (canvas.alpha.width(), canvas.alpha.height());
         let opacity = self.tool.brush.opacity;
-        let source = CommitSource { alpha: &canvas.alpha, tiles: &canvas.dirty, opacity, erase: false, per_texel: None, carried: None, carried_mask: None };
+        let source = CommitSource {
+            alpha: &canvas.alpha,
+            tiles: &canvas.dirty,
+            opacity,
+            erase: false,
+            per_texel: None,
+            carried: None,
+            carried_alpha: None,
+            carried_mask: None,
+        };
         if self.quick_mask.editing {
             self.commit_quick_mask(ts, size, source);
             return Ok(());
@@ -774,5 +786,6 @@ fn with_commit_source<R>(
     let per_texel: Option<texturecraft_paint::TexelFn> = if st.stencil.is_some() { Some(&stencil_fn) } else { None };
     let carried = st.canvas.pickup.as_ref().map(|p| &p.values);
     let carried_mask = st.canvas.pickup.as_ref().and_then(|p| p.mask_values());
-    f(CommitSource { alpha: &st.canvas.alpha, tiles, opacity: st.stroke.settings.opacity, erase: st.erase, per_texel, carried, carried_mask })
+    let carried_alpha = st.canvas.pickup.as_ref().and_then(|p| p.channel_alphas());
+    f(CommitSource { alpha: &st.canvas.alpha, tiles, opacity: st.stroke.settings.opacity, erase: st.erase, per_texel, carried, carried_alpha, carried_mask })
 }
