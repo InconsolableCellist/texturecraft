@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 use texturecraft_core::project::ENVIRONMENTS;
 use texturecraft_core::{BakedMap, Channel, EffectKind, EnvAlignment, Filter, Project, ShadowMode, ToneMapping};
-use texturecraft_geom::glam::Vec3;
+use texturecraft_geom::glam::{Vec2, Vec3};
 
 use crate::commands::{CommandSpec, always, bad, boolp, can_redo, can_undo, color_param, f32p, strp, u64p};
 use crate::frame_target::FrameTarget;
@@ -57,6 +57,15 @@ pub fn specs() -> Vec<CommandSpec> {
             camera_set
         ),
         cmd!("camera.get", "Get camera", [], None, "{}", always, |s, _| Ok(camera_json(s))),
+        cmd!(
+            "camera.pan",
+            "Pan camera",
+            [],
+            None,
+            "{dx?, dy? (viewport heights)} (moves the view sideways; the orbit then turns around the surface at the view center)",
+            always,
+            pan
+        ),
         cmd!(
             "camera.orbit",
             "Orbit camera",
@@ -264,6 +273,44 @@ fn camera_set(s: &mut Session, p: &Value) -> Result<Value> {
     }
     s.revision = s.revision.wrapping_add(1);
     Ok(camera_json(s))
+}
+
+fn pan(s: &mut Session, p: &Value) -> Result<Value> {
+    s.pan_camera(f32p(p, "dx").unwrap_or(0.0), f32p(p, "dy").unwrap_or(0.0));
+    Ok(camera_json(s))
+}
+
+impl Session {
+    /// Pan by a screen fraction (viewport heights), then seat the orbit target on the surface at
+    /// the view center, so the next orbit turns around the part panned to and not a point inside
+    /// the mesh at the old depth. The eye stays put: the target slides along the line of view and
+    /// the distance follows. An orthographic camera keeps its distance, which sets its scale.
+    /// Off the mesh, the target keeps its depth.
+    pub fn pan_camera(&mut self, dx: f32, dy: f32) {
+        self.camera.pan(dx, dy);
+        self.seat_target_on_view_center();
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    fn seat_target_on_view_center(&mut self) {
+        let viewport = self.viewport.max(Vec2::ONE);
+        let Some(hit) = self.pick(viewport * 0.5, viewport) else { return };
+        let forward = self.camera.forward();
+        let shift = (hit.pos - self.camera.target).dot(forward);
+        let r = self.camera.scene_radius.max(1e-3);
+        if self.camera.ortho {
+            self.camera.target += forward * shift;
+            return;
+        }
+
+        // Within the zoom's own range, so a later zoom doesn't jump
+        let distance = self.camera.distance + shift;
+        if !distance.is_finite() || distance < r * 0.05 || distance > r * 200.0 {
+            return;
+        }
+        self.camera.target += forward * shift;
+        self.camera.distance = distance;
+    }
 }
 
 fn orbit(s: &mut Session, p: &Value) -> Result<Value> {
