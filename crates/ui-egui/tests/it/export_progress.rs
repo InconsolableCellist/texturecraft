@@ -124,7 +124,10 @@ fn the_list_is_a_tree_per_texture_set_with_the_console_beside_it() {
     h.state_mut().ui.export.tab = 2;
     h.run_steps(4);
     let set = h.state().session.doc.project.texture_sets[0].name.clone();
-    assert!(h.query_by_label(&set).is_some());
+    assert!(
+        h.query_by_role_and_label(egui::Role::DisclosureTriangle, &set).is_some(),
+        "the export tree has a node for the set (the dock list row carries the same name)"
+    );
     assert!(h.query_all_by_label("256x256 (Texture Set size)").next().is_some());
     assert!(h.query_all_by_label("png").next().is_some() && h.query_all_by_label("16 bits").next().is_some());
     assert!(h.query_by_label("Include all").is_none() && h.query_by_label("Reset all").is_none());
