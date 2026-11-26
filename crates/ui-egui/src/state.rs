@@ -121,6 +121,9 @@ pub struct Windows {
     /// Window ▸ Reset UI is waiting for its answer.
     #[serde(skip)]
     pub confirm_reset_ui: bool,
+    /// The generator effect whose preview is open enlarged in its own window
+    #[serde(skip)]
+    pub generator_preview: Option<u64>,
 }
 
 /// An action that replaces or ends the project, held while the project has unsaved changes.
@@ -292,6 +295,9 @@ pub struct NewProject {
     /// Import settings > Import cameras: keep the cameras stored in the mesh file
     #[serde(default = "import_cameras_default")]
     pub import_cameras: bool,
+    /// Import settings > Rebuild mesh UVs.
+    #[serde(default)]
+    pub rebuild_uvs: bool,
     /// Color management as chosen in the window (the project is always created as Legacy)
     #[serde(skip)]
     pub color_management: crate::project_form::ColorManagement,
@@ -329,6 +335,7 @@ impl Default for NewProject {
             template: default_template(),
             normal_format: None,
             import_cameras: true,
+            rebuild_uvs: false,
             color_management: crate::project_form::ColorManagement::Legacy,
             baked_maps: Vec::new(),
         }
@@ -394,6 +401,17 @@ pub struct ExportUi {
     /// Output templates tab: the saved template `draft_maps` counts from.
     #[serde(skip)]
     pub draft_base: Option<texturecraft_engine::formats::ExportPreset>,
+    /// Output templates tab: for each map of `draft`, whether its R, G and B show as separate
+    /// channel swatches (R+G+B) instead of one RGB swatch.
+    #[serde(skip)]
+    pub draft_split: Vec<bool>,
+    /// LIST OF EXPORTS: the console's width, set by dragging the strip at its left edge.
+    #[serde(skip, default = "default_console_width")]
+    pub console_width: f32,
+    /// Output templates tab: a map dropped on an output channel, waiting for the source channel
+    /// ("Which part of <map>?").
+    #[serde(skip)]
+    pub pending_drop: Option<crate::export_templates::PendingDrop>,
     /// Output templates tab: the new name while renaming the selected preset.
     #[serde(skip)]
     pub renaming: Option<String>,
@@ -440,6 +458,9 @@ impl Default for ExportUi {
             draft: None,
             draft_maps: Vec::new(),
             draft_base: None,
+            draft_split: Vec::new(),
+            console_width: default_console_width(),
+            pending_drop: None,
             renaming: None,
             rename_key: false,
             ask: None,
@@ -449,6 +470,11 @@ impl Default for ExportUi {
             console_hidden: false,
         }
     }
+}
+
+/// The LIST OF EXPORTS console's width when the window opens, as in the reference
+fn default_console_width() -> f32 {
+    300.0
 }
 
 fn default_export_dir() -> String {

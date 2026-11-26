@@ -5203,6 +5203,7 @@ version = "0.6.1"
 dependencies = [
  "base64 0.22.1",
  "bytemuck",
+ "cap-std",
  "craft-cms",
  "craft-image-codecs",
  "craft-materialx",
@@ -5314,6 +5315,7 @@ dependencies = [
  "skera",
  "skrifa 0.48.0",
  "sys-locale",
+ "tempfile",
  "texturecraft-engine",
  "texturecraft-render",
  "wasm-bindgen",
