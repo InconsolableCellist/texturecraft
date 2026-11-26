@@ -239,10 +239,6 @@ impl Pickup {
             }
 
             let (sx, sy) = (sx as u32, sy as u32);
-            let a = a * strength * self.coverage.as_ref().map_or(1.0, |c| from_u16(c.get(sx, sy)[0]));
-            if a <= 0.0 {
-                continue;
-            }
 
             // Each smudge copy reads its own deposits over the original source
             let (seen_alpha, seen_values) = match &lane {
@@ -250,12 +246,22 @@ impl Pickup {
                 None => (&*alpha, &self.values),
             };
             let m = if smudge { from_u16(seen_alpha.get(sx, sy)[0]) } else { 0.0 };
+
+            // What there is to read: the stroke's own deposits over the source's coverage, so a
+            // smudge of one layer drags its paint on into the layer's empty texels
+            let cov = self.coverage.as_ref().map_or(1.0, |c| from_u16(c.get(sx, sy)[0]));
+            let held = m + cov * (1.0 - m);
+            let a = a * strength * held;
+            if a <= 0.0 {
+                continue;
+            }
+
             for c in self.values.keys() {
                 let base = self.source.value(*c, sx, sy);
                 let v = match seen_values.get(c) {
                     Some(img) if m > 0.0 => {
                         let carried = get(img, *c, sx, sy);
-                        std::array::from_fn(|k| carried[k] * m + base[k] * (1.0 - m))
+                        std::array::from_fn(|k| (carried[k] * m + base[k] * cov * (1.0 - m)) / held)
                     }
                     _ => base,
                 };

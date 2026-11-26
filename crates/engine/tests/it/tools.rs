@@ -512,3 +512,54 @@ fn solo_keeps_the_document_source_for_clone_and_the_material_picker() {
     s.update();
     assert!(red(color_at(&s, 240.0, 200.0)));
 }
+
+fn layer_of(v: Value) -> u64 {
+    v["layer"].as_u64().expect("the command returns the layer")
+}
+
+fn smudge_right(s: &mut Session, from: f32, to: f32) {
+    execute(s, "tool.smudge", &Value::Null).unwrap();
+    execute(s, "tool.brush", &json!({"size": 10, "smudgeStrength": 100, "spacing": 5})).unwrap();
+    let pts: Vec<[f32; 2]> = (0..=(to - from) as i32).map(|i| [from + i as f32, 200.0]).collect();
+    execute(s, "tool.stroke", &json!({"points": pts})).unwrap();
+}
+
+#[test]
+fn smudge_on_a_multiply_layer_drags_the_layer_not_the_stack_through_it_again() {
+    // An orange fill with an orange Multiply fill over it, the copy of that fill flattened to paint
+    let mut s = session();
+    execute(&mut s, "layer.add.fill", &json!({"color": [1.0, 0.5, 0.1]})).unwrap();
+    let multiply = layer_of(execute(&mut s, "layer.add.fill", &json!({"color": [1.0, 0.5, 0.1]})).unwrap());
+    execute(&mut s, "layer.blend", &json!({"layer": multiply, "channel": "all", "mode": "multiply"})).unwrap();
+    let copy = layer_of(execute(&mut s, "layer.duplicate", &json!({"layer": multiply})).unwrap());
+    let flat = layer_of(execute(&mut s, "layer.flatten", &json!({"layer": copy})).unwrap());
+    execute(&mut s, "layer.select", &json!({"layer": flat})).unwrap();
+    s.update();
+    let before = color_at(&s, 205.0, 200.0);
+
+    smudge_right(&mut s, 170.0, 210.0);
+
+    let after = color_at(&s, 205.0, 200.0);
+    let hue = |v: [f32; 3]| v[1] / v[0].max(1e-4);
+    assert!(hue(after) > hue(before) * 0.9, "a smudge across one flat color keeps the color, no red splotch: {before:?} -> {after:?}");
+}
+
+#[test]
+fn smudge_on_a_pass_through_layer_drags_the_layers_below() {
+    let mut s = session();
+    paint_red(&mut s, 12.0);
+    dab(&mut s, 170.0, 200.0);
+    let below = color_at(&s, 205.0, 200.0);
+    let top = layer_of(execute(&mut s, "layer.add.paint", &json!({})).unwrap());
+    execute(&mut s, "layer.select", &json!({"layer": top})).unwrap();
+
+    // On Normal, the empty layer has nothing to drag
+    smudge_right(&mut s, 170.0, 210.0);
+    let normal = color_at(&s, 205.0, 200.0);
+    assert!((normal[0] - below[0]).abs() < 0.02, "an empty Normal layer drags nothing: {below:?} -> {normal:?}");
+
+    execute(&mut s, "layer.blend", &json!({"layer": top, "channel": "all", "mode": "passthrough"})).unwrap();
+    smudge_right(&mut s, 170.0, 210.0);
+    let pass = color_at(&s, 205.0, 200.0);
+    assert!(pass[0] - below[0] > 0.2 && pass[1] < below[1], "on Pass through the smudge drags the red below: {below:?} -> {pass:?}");
+}
