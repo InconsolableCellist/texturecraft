@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 use texturecraft_core::project::ENVIRONMENTS;
 use texturecraft_core::{BakedMap, Channel, EffectKind, EnvAlignment, Filter, Project, ShadowMode, ToneMapping};
-use texturecraft_geom::glam::Vec2;
+use texturecraft_geom::glam::{Vec2, Vec3};
 
 use crate::commands::{CommandSpec, always, bad, boolp, can_redo, can_undo, color_param, f32p, strp, u64p, vec3};
 use crate::frame_target::FrameTarget;
@@ -306,12 +306,26 @@ impl Session {
 
     fn seat_target_on_view_center(&mut self) {
         let viewport = self.viewport.max(Vec2::ONE);
-        let Some(hit) = self.pick(viewport * 0.5, viewport) else { return };
+        let ray = self.camera.ray(Vec2::ZERO, viewport.x / viewport.y);
+        // Only surfaces on screen: a hidden texture set never takes the pivot
+        let sets = &self.doc.project.texture_sets;
+        let visible = |triangle: u32| {
+            let material = self.mesh.material_of(triangle as usize).unwrap_or(0);
+            sets.iter().find(|set| set.material == material).is_none_or(|set| set.visible)
+        };
+        let Some(hit) = self.bvh.closest_filtered(ray.origin, ray.dir, f32::MAX, &visible) else { return };
         let forward = self.camera.forward();
-        let shift = (hit.pos - self.camera.target).dot(forward);
+        let shift = (ray.origin + ray.dir * hit.t - self.camera.target).dot(forward);
         let r = self.camera.scene_radius.max(1e-3);
         if self.camera.ortho {
-            self.camera.target += forward * shift;
+            // The eye moves with the pivot and the near plane sits at the eye: stop it short of the
+            // mesh, so a pivot seated farther away never cuts off what is in front of it
+            let (lo, hi) = self.mesh.bounds();
+            let eye = self.camera.eye();
+            let corners = (0..8).map(|i| Vec3::new([lo.x, hi.x][i & 1], [lo.y, hi.y][(i >> 1) & 1], [lo.z, hi.z][(i >> 2) & 1]));
+            let front = corners.map(|corner| (corner - eye).dot(forward)).fold(f32::MAX, f32::min);
+            let room = (front - r * 0.01).max(0.0);
+            self.camera.target += forward * shift.min(room);
             return;
         }
 
