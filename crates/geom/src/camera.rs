@@ -137,6 +137,12 @@ impl OrbitCamera {
         depth / self.framed_distance()
     }
 
+    /// The scale screen-space brushes had before [`OrbitCamera::screen_brush_scale`]: the eye
+    /// distance over the pivot distance (kept for paths saved with it)
+    pub fn pivot_brush_scale(&self, eye_distance: f32) -> f32 {
+        eye_distance / self.distance.max(1e-4)
+    }
+
     /// The distance [`OrbitCamera::frame`] picks for the scene at the current field of view
     pub fn framed_distance(&self) -> f32 {
         let half_fov = self.fov.clamp(5.0, 150.0).to_radians() * 0.5;

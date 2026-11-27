@@ -1025,7 +1025,7 @@ impl Session {
             }
         }
         self.painting_paths = false;
-        self.path_screen_factor = 1.0;
+        self.path_pivot_scale = false;
         (self.tool, self.camera, self.target, self.quick_mask.editing) = saved;
         (self.undo, self.redo) = history;
         result.map(|_| out)
@@ -1034,9 +1034,8 @@ impl Session {
     fn paint_shape(&mut self, shape: &PathShape) -> Result<Value> {
         let paint = read_paint(shape)?;
         let (camera, viewport) = paint_view(shape, &paint);
-        // A screen-space brush saved before the framed scale keeps the size it painted with
-        self.path_screen_factor =
-            if paint.brush.screen_space && !paint.framed_screen_scale { camera.framed_distance() / camera.distance.max(MIN_BRUSH_SCALE) } else { 1.0 };
+        // A screen-space brush saved before the framed scale keeps the scale it painted with
+        self.path_pivot_scale = !paint.framed_screen_scale;
         self.tool.brush = paint.brush;
         self.tool.values = paint.values;
         self.tool.enabled = paint.enabled;
@@ -1129,16 +1128,15 @@ impl Session {
             let inverses: Vec<_> = symmetry.transforms().iter().map(|transform| transform.inverse()).collect();
 
             // Copies can leave the source surface, within the same depth allowed for brush stamps
-            let screen_factor = if brush.screen_space { self.path_screen_factor } else { 1.0 };
-            let copy_depth = brush.size * (bounds_max - bounds_min).length().max(MIN_BRUSH_SCALE) * brush.depth * screen_factor;
+            let copy_depth = brush.size * (bounds_max - bounds_min).length().max(MIN_BRUSH_SCALE) * brush.depth;
             let eye = self.camera.eye();
+            let camera = self.camera;
+            let screen_scale =
+                |eye_distance: f32| if self.path_pivot_scale { camera.pivot_brush_scale(eye_distance) } else { camera.screen_brush_scale(eye_distance) };
 
             // Bound the search using the farthest bounding-box corner; acceptance still uses the actual hit
-            let max_copy_depth = if brush.screen_space {
-                copy_depth * self.camera.screen_brush_scale((bounds_min - eye).abs().max((bounds_max - eye).abs()).length())
-            } else {
-                copy_depth
-            };
+            let max_copy_depth =
+                if brush.screen_space { copy_depth * screen_scale((bounds_min - eye).abs().max((bounds_max - eye).abs()).length()) } else { copy_depth };
 
             fill_coverage(&mut canvas, &uv_buffer, |texel, _| {
                 let Some(surface) = uv_buffer.surface(mesh, texel) else { return 0.0 };
@@ -1172,7 +1170,7 @@ impl Session {
                     let off_surface = if !is_copy {
                         0.0
                     } else if brush.screen_space {
-                        copy_depth * self.camera.screen_brush_scale((origin + direction * hit.t).distance(eye))
+                        copy_depth * screen_scale((origin + direction * hit.t).distance(eye))
                     } else {
                         copy_depth
                     };
